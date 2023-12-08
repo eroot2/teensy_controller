@@ -19,7 +19,9 @@
 #include <SD.h>
 #include <QNEthernet.h>
 //#include <new>
+//#include <std>
 String filename = "test.txt";  //MISSING: Save data to SD functionality, eventually store webpage html on sd card
+//for string literals for file names and html, consider a raw string
 File webPage;
 
 #define PIN_INPUT 20
@@ -44,10 +46,10 @@ double smoothAvg = 0;            // the average
 
 
 //TIMING VARS
-int PWM_len = 5000;   //cycle length in ms
-int sampleTime = 50;  //polling rate (ms)
+const int PWM_len = 5000;   //cycle length in ms
+const int sampleTime = 50;  //polling rate (ms)
 //int outputChangeTime = sampleTime;
-int printRate = 250;    //print this often (ms)
+const int printRate = 250;  //print this often (ms)
 int count = 0;
 elapsedMillis curTime;
 elapsedMillis sinceSample;
@@ -56,7 +58,6 @@ elapsedMillis sincePrint;
 
 //misc. other vars
 String incomingSerial = "";
-int bytesIn = 0;
 
 //OPTION SELECT VARS
 bool printStats = true;
@@ -64,6 +65,8 @@ bool precisionMode = false;
 bool takeSerialInput = true;
 bool autoTuning = false;
 int printStyle = 0;  //decides what format print_stats() uses in its serial statements 0 = verbose/readable, 1 = csv, 2 = serial graph labels, ...
+
+
 
 void setup() {
   pinMode(PIN_INPUT, INPUT);
@@ -81,17 +84,19 @@ void setup() {
   Serial.begin(9600);
   while (!Serial && (millis() < 3000)) {}
 
-  if (printStyle==1){   //header line for a csv formatted file output (prints to serial for now though)
-    Serial.printf("loop, time (ms), input/1023, input (C), smoothed input over last %d samples, output\%, output(ms/%dms)", recentSamples, PWM_len);}
-  else if (printStyle==2){  //if serial graph output is desired, print out header line to assign variables
-    Serial.printf("");}
+  if (printStyle == 1) {  //header line for a csv formatted file output (prints to serial for now though)
+    Serial.printf("loop, time (ms), input/1023, input (C), smoothed input over last %d samples, output\%, output(ms/%dms)", recentSamples, PWM_len);
+  } else if (printStyle == 2) {  //if serial graph output is desired, print out header line to assign variables
+    Serial.printf("");
+  }
 }
 
 void loop() {
 
-  if (sinceSample >= ((long unsigned int)sampleTime)) {//consider implementing this check identically to the internal compute() check to make sure they synch better
-    sinceSample -= sampleTime;   //ALT IDEA: call compute every time, if it returns positive then sample and smooth the next val immediately, for the next triggered compute
-                                // - essentially always be computing with the last sample and immediately grab the next data point. offset would be bad w long sample time though
+  if (sinceSample >= ((long unsigned int)sampleTime)) {  //consider implementing this check identically to the internal compute() check to make sure they synch better
+    sinceSample -= sampleTime;                           //ALT IDEA: call compute every time, if it returns positive then sample and smooth the next val immediately, for the next triggered compute
+                                                         // - essentially always be computing with the last sample and immediately grab the next data point. offset would be bad w long sample time though
+                                                         //OR compute a few times around when it should trigger, and take readings each time but only keep the one from the successful compute
     //GATHER INPUT and convert and smooth it
     raw_input = analogRead(PIN_INPUT);
     input_C = inputToCelcius(raw_input);
@@ -116,22 +121,8 @@ void loop() {
   }
 
   //SCAN SERIAL USER INPUT DURING RUNTIME
-  if(Serial.available()){
-    bytesIn = 0;  //CONSIDER: just using incomingSerial.len()
-    incomingSerial = String("");
-    while (Serial.available() && bytesIn < 48){
-    char charIn = Serial.read();
-    incomingSerial+=charIn;
-    bytesIn++;
-    Serial.print(charIn);
-    }
-    Serial.printf("Full serial input received at time(s): %.2f\n", curTime/1000.0);
-    Serial.println(incomingSerial);
-    if(incomingSerial.indexOf("Poggers")!=-1){
-      Serial.println("I understand! Secret message received");
-    }else{
-      Serial.println("Did not hear the secret passcode.");
-    }
+  if (Serial.available()) {
+    receiveSerial();
   }
 
   /************************************************
@@ -140,7 +131,7 @@ void loop() {
   if (sinceSample >= (unsigned long)PWM_len) {  //time to shift the Relay Window
     sinceSample -= PWM_len;
   }
-  if (sinceSample  < output) digitalWrite(RELAY_PIN, HIGH);
+  if (sinceSample < output) digitalWrite(RELAY_PIN, HIGH);
   else digitalWrite(RELAY_PIN, LOW);
 
   count++;
@@ -155,13 +146,13 @@ double temp_convert(double celcius) {
 }
 
 //get Hz measurement of a given interval, initially in ms. rounds down to an int, consider whether double is needed
-int hzOf(int waitPeriod){
-  return 1000/waitPeriod;
+int hzOf(int waitPeriod) {
+  return 1000 / waitPeriod;
 }
 
 //get period measurement in ms from a given hz of occurences. also rounds down to an int, consider whether double is better
-int periodOf(int hz){
-  return 1000/hz;
+int periodOf(int hz) {
+  return 1000 / hz;
 }
 
 //uses equation found through calibration to convert raw 0-3.3V --> 0-1023 --> ~0-100C
@@ -195,30 +186,67 @@ double smoothInput(double newVal) {
   return smoothAvg;
 }
 
-void printSerial(){
-  switch(printStyle){
-    case 0: // verbose
-    Serial.printf("printing on loop cycle: %d at time: %u\n", count, curTime/1000);
-    Serial.printf("setpoint: %.1f, raw input/1023: %d, input in celcius: %.1f,\
-     smoothed input over last %d vals: %.1f \n", setpoint, raw_input, input_C, recentSamples, smoothed_input);
-    Serial.printf("raw input: %f", raw_input);
-    Serial.printf(" input in Celcius: %f\n", input);
-    Serial.printf("output out of %d: %f ", PWM_len, output);
-    Serial.printf(" output as a percent: %f\%\n\n", output / PWM_len * 100.0);
-    break;
-    case 1: // csv for analysis
-    Serial.printf("%d, %ld, %d, %d, %.2f, %.2f, %.1f\n", count, curTime, raw_input, input_C, smoothed_input, output*100.0/PWM_len, output);
-    break;
-    case 2: //serial graph format for live monitoring until a graph is implemented 
-    Serial.printf("Setpoint:%.2f, Seconds:%.2f, input(C):%.2f, Smoothed_Input(C):%.2f, output(\%):%.2f"
-                 , setpoint, curTime/1000.0, input_C, smoothed_input);
-    break;
+bool printSerial(Stream target, int pStyle) {
+  switch (printStyle) {
+    case 0:  // verbose
+      Serial.printf("printing on loop cycle: %d at time: %u\n", count, curTime / 1000);
+      Serial.printf("setpoint: %.1f, raw input/1023: %d, input in celcius: %.1f,\
+     smoothed input over last %d vals: %.1f \n",
+                    setpoint, raw_input, input_C, recentSamples, smoothed_input);
+      Serial.printf("raw input: %f", raw_input);
+      Serial.printf(" input in Celcius: %f\n", input);
+      Serial.printf("output out of %d: %f ", PWM_len, output);
+      Serial.printf(" output as a percent: %f\%\n\n", output / PWM_len * 100.0);
+      break;
+    case 1:  // csv for analysis
+      Serial.printf("%d, %ld, %d, %d, %.2f, %.2f, %.1f\n", count, curTime, raw_input, input_C, smoothed_input, output * 100.0 / PWM_len, output);
+      break;
+    case 2:  //serial graph format for live monitoring until a graph is implemented
+      Serial.printf("Setpoint:%.2f, Seconds:%.2f, input(C):%.2f, Smoothed_Input(C):%.2f, output(\%):%.2f", setpoint, curTime / 1000.0, input_C, smoothed_input);
+      break;
     default:
-    Serial.printf("select valid print option: 0 for verbose, 1 for csv, 2 to save to csv?");
+      Serial.printf("select valid print option: 0 for verbose, 1 for csv, 2 to save to csv?");
   }
   return;
 }
 
+String receiveSerial() {
+  incomingSerial = String("");
+  bool understood = false;
+  while (Serial.available() && incomingSerial.length() < 64) {
+    char charIn = Serial.read();
+    incomingSerial += charIn;
+    Serial.print(charIn);
+  }
+  Serial.printf("Full serial input received at time(s): %.1f\n", curTime / 1000.0);
+  Serial.println(incomingSerial);
+
+  if (incomingSerial.indexOf("Poggers") != -1) {
+    Serial.println("I understand! Secret message received");
+  } else {
+    Serial.println("Did not hear the secret passcode.");
+  }
+  if (incomingSerial.length() > 1) {
+    if (incomingSerial[0] == '-') {
+      switch (incomingSerial[1]) {
+        case 'a':
+          ofstream myfile;
+          myfile.open("example.txt");
+          myfile << "Writing this to a file.\n";
+          myfile.close();
+          break;
+
+        case 'b':
+          Serial.println("INPUT -b RECIEVED");
+          break;
+
+        default:
+          break;
+      }
+    }
+  }
+  return incomingSerial;
+}
 
 /*
          TODO: 

@@ -19,6 +19,7 @@ using namespace qindesign::network;
 
 //vars
 String HTTP_req;  // stores the HTTP request
+//for string literals for file names and html, consider a raw string
 
 bool printMac = 0;
 bool sendFile = true;
@@ -109,7 +110,7 @@ void loop() {
   if (client) {
     Serial.printf("new client %d\n", count);
     // an http request ends with a blank line
-    boolean currentLineIsBlank = true;
+    bool currentLineIsBlank = true;
     while (client.connected()) {
       if (client.available()) {
         char c = client.read();
@@ -216,7 +217,7 @@ void loop() {
         }
       }
     }
-    if (sendFile && sdPresent){readFromSD(client);}
+    if (sendFile && sdPresent){useSD(client, "datalog.txt", nullptr, true);}
     // give the web browser time to receive the data
     count++;
     delay(1);
@@ -271,7 +272,7 @@ void sendTestData(EthernetClient& client) {
   }
 }
 
-bool readFromSD(EthernetClient client){
+bool useSD(EthernetClient client, char[] fName, char[] inString = "", bool reading){
   Serial.print("Initializing SD card...");
   // see if the card is present and can be initialized:
   if (!SD.begin(BUILTIN_SDCARD)) {
@@ -279,12 +280,14 @@ bool readFromSD(EthernetClient client){
     // don't do anything more:
     return false;}
   Serial.println("card initialized.");
-  
   // open the file.
-  File dataFile = SD.open("datalog.txt");
-
+  File dataFile = SD.open(fName);
   // if the file is available, write to it:
   if (dataFile) {
+  // ofstream myfile;
+  // myfile.open ("example.txt");
+  // myfile << "Writing this to a file.\n";
+  // myfile.close();
     while (dataFile.available()) {
       Serial.write(dataFile.read());
     }

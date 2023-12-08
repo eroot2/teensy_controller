@@ -31,7 +31,7 @@ IPAddress ip(192, 168, 1, 177);
 EthernetServer server(80);
 
 File webPage;
-int RED = 8;              //LED to turn on/off
+int RED = LED_BUILTIN;              //LED to turn on/off
 String HTTP_req;          // stores the HTTP request
 
 void setup()
